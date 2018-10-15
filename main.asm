@@ -19,11 +19,13 @@
   .byte $00       ; Flag 9: TV System NTSC ($01 is PAL)
   .byte $00
   ; Fillers
-  .byte $00 $00 $00 $00 $00
+  .byte $00, $00, $00, $00, $00
 
 ; This area of the memory goes from $00 to $FF and is mainly used to describe
 ; variables for your program
 .segment "ZEROPAGE"
+
+.segment "STARTUP"
 
 ; This area is where the PRG ROM starts
 .segment "CODE"
@@ -32,6 +34,9 @@ WAITFORVBLANK:
   BIT $2002
   BPL WAITFORVBLANK
   RTS
+
+VBLANK:
+  RTI
 
 IRQ:
   RTI
@@ -52,6 +57,8 @@ RESET:
 
   TXA ; A Register is now #$00
 
+; Basically now what you have to do is to clear the memory to avoid unwanted
+; glitches when the game is starting
 CLEARMEM:
   STA $0100, X
   STA $0300, X
@@ -60,11 +67,34 @@ CLEARMEM:
   STA $0600, X
   STA $0700, X
   LDA #$FF
+  ; Fills the $0200 level with $FF to clean the sprites memory
   STA $0200, X
   LDA #$00
-  INX
-  BNE CLEARMEM
+  INX           ; if X != $00 keep clearing
+  BNE CLEARMEM  ; else X == $00 then zero flag set and BNE is not triggered
 
+LOADPALETTE:
+  LDA PALETTE, X  ; Get color
+  STA $2007       ; Store it into PPU
+  INX             ; Next color
+  CPX #$20        ; if x == 32 all colors are loaded
+  BNE LOADPALETTE ; else keep loading
+
+PALETTE:
+  ; Background palette data
+  ; NOTE: You can change these data, they are simply for the template
+  .byte $0F,$31,$32,$33
+  .byte $0F,$35,$36,$37
+  .byte $0F,$39,$3A,$3B
+  .byte $0F,$3D,$3E,$0F
+
+  ; Sprite palette data
+  .byte $0F,$1C,$15,$14
+  .byte $0F,$02,$38,$3C
+  .byte $0F,$1C,$15,$14
+  .byte $0F,$02,$38,$3C
+
+; Set up the vectors and redirect notifications
 .segment "VECTORS"
   .word VBLANK
   .word RESET
