@@ -35,9 +35,6 @@ WAITFORVBLANK:
   BPL WAITFORVBLANK
   RTS
 
-VBLANK:
-  RTI
-
 IRQ:
   RTI
 
@@ -73,12 +70,61 @@ CLEARMEM:
   INX           ; if X != $00 keep clearing
   BNE CLEARMEM  ; else X == $00 then zero flag set and BNE is not triggered
 
+  SPRITE_SIZE   = 4 ; 4 bytes
+  TOTAL_SPRITES = 8 ; 4 sprites
+  SPRITES_SIZE  = TOTAL_SPRITES * SPRITE_SIZE
+
+  ; Prepare the PPU to receive the palette. It's basically telling the PPU at
+  ; which address you will start storing the palette
+  LDA $2002    ; Read PPUSTATUS to reset the high/low latch to high
+  LDA #$3F
+  STA $2006    ; Write the high byte of $3F00 address
+  LDA #$00
+  STA $2006    ; Write the low byte of $3F00 addres
+
+  LDX #$00
 LOADPALETTE:
   LDA PALETTE, X  ; Get color
   STA $2007       ; Store it into PPU
   INX             ; Next color
   CPX #$20        ; if x == 32 all colors are loaded
   BNE LOADPALETTE ; else keep loading
+
+  JSR WAITFORVBLANK
+
+  LDX #$00
+LOADSPRITES:
+  LDA SPRITES, X
+  STA $0200, X
+  INX
+  CPX #SPRITES_SIZE
+  BNE LOADSPRITES
+
+  LDA #%10000000   ; enable NMI, sprites from Pattern Table 0
+  STA $2000
+  LDA #%00010000   ; enable sprites
+  STA $2001
+
+FOREVER:
+  JSR WAITFORVBLANK
+  JMP FOREVER
+
+VBLANK:
+  LDA #$00
+  STA $2003  ; set the low byte (00) of the RAM address
+  LDA #$02
+  STA $4014  ; set the high byte (02) of the RAM address, start the transfer
+  RTI
+
+SPRITES:
+  .byte $80,$00,$00,$80
+  .byte $80,$01,$00,$88
+  .byte $88,$02,$00,$80
+  .byte $88,$03,$00,$88
+  .byte $90,$04,$00,$80
+  .byte $90,$05,$00,$88
+  .byte $98,$06,$00,$80
+  .byte $98,$07,$00,$88
 
 PALETTE:
   ; Background palette data
@@ -98,7 +144,8 @@ PALETTE:
 .segment "VECTORS"
   .word VBLANK
   .word RESET
-  .word IRQ
+  .word 0
 
 ; This area represents the CHR ROM
 .segment "CHARS"
+  .incbin "mario.chr"
